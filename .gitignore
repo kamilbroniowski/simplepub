@@ -178,3 +178,11 @@ user_prefs.json
 __pycache__/
 .vscode/
 *.pyc
+
+# Development files
+/dev/
+*.cache.json
+/data/google_fonts_*.json
+google_fonts_cache.json
+fonts_cache.json
+
