@@ -5,6 +5,8 @@ import shutil
 import json
 import xml.etree.ElementTree as ET
 import uuid
+import requests
+import time
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
@@ -25,6 +27,9 @@ if not os.path.exists(app.config['USER_PREFS_FILE']):
         json.dump({
             'font_size': 16,
             'font_family': 'serif',
+            'font_variant': 'regular',
+            'font_weight': '400',
+            'google_font': '',
             'line_height': 1.5,
             'theme': 'light'
         }, f)
@@ -343,12 +348,97 @@ def user_preferences():
         current_prefs = get_user_prefs()
         
         # Update preferences with new values
-        for key in ['font_size', 'font_family', 'line_height', 'theme']:
+        for key in ['font_size', 'font_family', 'line_height', 'theme', 'google_font', 'font_variant', 'font_weight']:
             if key in data:
                 current_prefs[key] = data[key]
         
         save_user_prefs(current_prefs)
         return jsonify({'success': True})
 
+def load_google_fonts():
+    """Load Google Fonts data from the data directory"""
+    try:
+        # First, look for the latest Google Fonts data file in the data directory
+        data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
+        font_files = [f for f in os.listdir(data_dir) if f.startswith('google_fonts_full_') and f.endswith('.json')]
+        
+        if font_files:
+            # Sort by date to get the latest file
+            latest_file = sorted(font_files)[-1]
+            cache_file = os.path.join(data_dir, latest_file)
+            print(f"Loading fonts from: {cache_file}")
+            
+            with open(cache_file, 'r') as f:
+                return json.load(f)
+        
+        # Fallback to the old cache file if needed - first check prod location, then dev location
+        cache_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'google_fonts_cache.json')
+        if not os.path.exists(cache_file):
+            cache_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'dev', 'data', 'google_fonts_cache.json')
+        if os.path.exists(cache_file):
+            with open(cache_file, 'r') as f:
+                return json.load(f)
+                
+        # Final fallback to a curated list
+        return {
+            "kind": "webfonts#webfontList",
+            "items": [
+                {
+                    "family": "Roboto", 
+                    "variants": ["100", "100italic", "300", "300italic", "regular", "italic", "500", "500italic", "700", "700italic", "900", "900italic"], 
+                    "category": "sans-serif",
+                    "subsets": ["latin", "latin-ext", "cyrillic", "cyrillic-ext", "greek", "greek-ext", "vietnamese"]
+                },
+                {
+                    "family": "Open Sans", 
+                    "variants": ["300", "regular", "500", "600", "700", "800", "300italic", "italic", "500italic", "600italic", "700italic", "800italic"], 
+                    "category": "sans-serif",
+                    "subsets": ["latin", "latin-ext", "cyrillic", "cyrillic-ext", "greek", "greek-ext", "vietnamese"]
+                },
+                {
+                    "family": "Lato", 
+                    "variants": ["100", "100italic", "300", "300italic", "regular", "italic", "700", "700italic", "900", "900italic"], 
+                    "category": "sans-serif",
+                    "subsets": ["latin", "latin-ext"]
+                },
+                {
+                    "family": "Noto Sans", 
+                    "variants": ["regular", "italic", "700"], 
+                    "category": "sans-serif",
+                    "subsets": ["latin", "devanagari", "cyrillic", "greek", "thai", "arabic", "hebrew"]
+                }
+            ]
+        }
+    except Exception as e:
+        print(f"Error loading Google Fonts: {str(e)}")
+        # Return a minimal fallback
+        return {
+            "kind": "webfonts#webfontList",
+            "items": [
+                {
+                    "family": "Roboto", 
+                    "variants": ["regular", "italic", "700"], 
+                    "category": "sans-serif",
+                    "subsets": ["latin"]
+                }
+            ]
+        }
+
+@app.route('/api/fonts')
+def get_fonts():
+    """Get list of available fonts from Google Fonts cache"""
+    try:
+        # Load directly from our Google Fonts cache
+        fonts_data = load_google_fonts()
+        return jsonify(fonts_data)
+    
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5050)
+    import argparse
+    parser = argparse.ArgumentParser(description='Run the SimplePub EPUB reader server')
+    parser.add_argument('--port', type=int, default=5050, help='Port to run the server on')
+    args = parser.parse_args()
+    
+    app.run(debug=True, host='0.0.0.0', port=args.port)

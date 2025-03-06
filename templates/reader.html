@@ -11,6 +11,11 @@
         --font-family: {{ user_prefs.font_family }};
     }
 </style>
+
+{% if user_prefs.google_font %}
+<!-- Load Font if selected (using Bunny Fonts - a privacy-friendly alternative) -->
+<link rel="stylesheet" href="https://fonts.bunny.net/css2?family={{ user_prefs.google_font | replace(' ', '+') }}:wght@{{ user_prefs.font_weight }}&display=swap">
+{% endif %}
 {% endblock %}
 
 {% block content %}
@@ -67,11 +72,65 @@
             </div>
             
             <div class="settings-group">
-                <label for="font-family">Font Family</label>
+                <label for="font-family">System Fonts</label>
                 <select id="font-family">
-                    <option value="serif" {% if user_prefs.font_family == 'serif' %}selected{% endif %}>Serif</option>
-                    <option value="sans-serif" {% if user_prefs.font_family == 'sans-serif' %}selected{% endif %}>Sans-Serif</option>
-                    <option value="monospace" {% if user_prefs.font_family == 'monospace' %}selected{% endif %}>Monospace</option>
+                    <option value="serif" {% if user_prefs.font_family == 'serif' and not user_prefs.google_font %}selected{% endif %}>Serif</option>
+                    <option value="sans-serif" {% if user_prefs.font_family == 'sans-serif' and not user_prefs.google_font %}selected{% endif %}>Sans-Serif</option>
+                    <option value="monospace" {% if user_prefs.font_family == 'monospace' and not user_prefs.google_font %}selected{% endif %}>Monospace</option>
+                </select>
+            </div>
+            
+            <div class="settings-group">
+                <label for="font-category">Font Category</label>
+                <select id="font-category">
+                    <option value="all">All Categories</option>
+                    <option value="sans-serif">Sans-Serif</option>
+                    <option value="serif">Serif</option>
+                    <option value="monospace">Monospace</option>
+                    <option value="display">Display</option>
+                    <option value="handwriting">Handwriting</option>
+                </select>
+            </div>
+            
+            <div class="settings-group">
+                <label for="font-subset">Language Support</label>
+                <select id="font-subset">
+                    <option value="latin">Latin (English/Western)</option>
+                    <option value="latin-ext">Latin Extended</option>
+                    <option value="cyrillic">Cyrillic (Russian)</option>
+                    <option value="cyrillic-ext">Cyrillic Extended</option>
+                    <option value="greek">Greek</option>
+                    <option value="greek-ext">Greek Extended</option>
+                    <option value="vietnamese">Vietnamese</option>
+                    <option value="arabic">Arabic</option>
+                    <option value="hebrew">Hebrew</option>
+                    <option value="devanagari">Devanagari (Hindi)</option>
+                    <option value="thai">Thai</option>
+                    <option value="korean">Korean</option>
+                    <option value="chinese-simplified">Chinese Simplified</option>
+                    <!-- More subsets can be added based on availability -->
+                </select>
+            </div>
+            
+            <div class="settings-group">
+                <label for="google-font">Google Font</label>
+                <select id="google-font">
+                    <option value="" {% if not user_prefs.google_font %}selected{% endif %}>None (Use System Font)</option>
+                    <!-- Google Fonts will be loaded via JavaScript -->
+                </select>
+            </div>
+            
+            <div class="settings-group" id="font-variant-container" {% if not user_prefs.google_font %}style="display: none;"{% endif %}>
+                <label for="font-variant">Font Variant</label>
+                <select id="font-variant">
+                    <!-- Font variants will be loaded via JavaScript -->
+                </select>
+            </div>
+            
+            <div class="settings-group" id="font-weight-container" {% if not user_prefs.google_font %}style="display: none;"{% endif %}>
+                <label for="font-weight">Font Weight</label>
+                <select id="font-weight">
+                    <!-- Font weights will be loaded via JavaScript -->
                 </select>
             </div>
             
@@ -112,9 +171,22 @@
     const fontSizeInput = document.getElementById('font-size');
     const lineHeightInput = document.getElementById('line-height');
     const fontFamilySelect = document.getElementById('font-family');
+    const fontCategorySelect = document.getElementById('font-category');
+    const fontSubsetSelect = document.getElementById('font-subset');
+    const googleFontSelect = document.getElementById('google-font');
+    const fontVariantSelect = document.getElementById('font-variant');
+    const fontWeightSelect = document.getElementById('font-weight');
+    const fontVariantContainer = document.getElementById('font-variant-container');
+    const fontWeightContainer = document.getElementById('font-weight-container');
     const themeSelect = document.getElementById('theme');
     const fontSizeValue = document.getElementById('font-size-value');
     const lineHeightValue = document.getElementById('line-height-value');
+    
+    // Font filtering variables
+    let googleFontsData = [];
+    let filteredFontsData = [];
+    let currentCategory = 'all';
+    let currentSubset = 'latin';
     
     // Track current position
     let currentFileIndex = spine.indexOf(currentFile);
@@ -179,7 +251,10 @@
             font_size: parseInt(fontSizeInput.value),
             line_height: parseFloat(lineHeightInput.value),
             font_family: fontFamilySelect.value,
-            theme: themeSelect.value
+            theme: themeSelect.value,
+            google_font: googleFontSelect.value,
+            font_variant: fontVariantSelect.value,
+            font_weight: fontWeightSelect.value
         };
         
         fetch('/api/user_prefs', {
@@ -206,14 +281,47 @@
             doc.head.appendChild(style);
         }
         
+        // Determine font-family based on whether a Google Font is selected
+        let fontFamily = fontFamilySelect.value;
+        if (googleFontSelect.value) {
+            fontFamily = `"${googleFontSelect.value}", ${fontFamilySelect.value}`;
+        }
+        
         // Apply preferences as CSS
         style.textContent = `
             body {
-                font-family: ${fontFamilySelect.value} !important;
+                font-family: ${fontFamily} !important;
                 font-size: ${fontSizeInput.value}px !important;
                 line-height: ${lineHeightInput.value} !important;
             }
+            
+            /* Exclude pre tags from custom font */
+            pre {
+                font-family: monospace !important;
+            }
         `;
+        
+        // Add Google Font stylesheet if needed
+        if (googleFontSelect.value) {
+            let googleFontLink = doc.getElementById('google-font-link');
+            if (!googleFontLink) {
+                googleFontLink = doc.createElement('link');
+                googleFontLink.id = 'google-font-link';
+                googleFontLink.rel = 'stylesheet';
+                doc.head.appendChild(googleFontLink);
+            }
+            
+            // Construct Google Fonts URL
+            const fontName = encodeURIComponent(googleFontSelect.value).replace(/%20/g, '+');
+            const fontWeight = fontWeightSelect.value;
+            googleFontLink.href = `https://fonts.googleapis.com/css2?family=${fontName}:wght@${fontWeight}&display=swap`;
+        } else {
+            // Remove Google Font link if not using one
+            const googleFontLink = doc.getElementById('google-font-link');
+            if (googleFontLink) {
+                googleFontLink.remove();
+            }
+        }
         
         // Apply theme
         document.body.dataset.theme = themeSelect.value;
@@ -282,6 +390,240 @@
         applyUserPrefsToContent(frameDoc);
     });
     
+    // Filter fonts based on current category and subset selections
+    function filterFonts() {
+        // Start with all fonts
+        filteredFontsData = [...googleFontsData];
+        
+        // Filter by category if not set to 'all'
+        if (currentCategory !== 'all') {
+            filteredFontsData = filteredFontsData.filter(font => font.category === currentCategory);
+        }
+        
+        // Filter by subset (language support)
+        if (currentSubset !== 'all') {
+            filteredFontsData = filteredFontsData.filter(font => {
+                // Check if the font has subsets property and if it contains the selected subset
+                return font.subsets && font.subsets.includes(currentSubset);
+            });
+        }
+        
+        // Update the font selection dropdown with filtered results
+        updateFontDropdown();
+    }
+    
+    // Update the font dropdown with filtered fonts
+    function updateFontDropdown() {
+        // Clear existing options except the first one
+        while (googleFontSelect.options.length > 1) {
+            googleFontSelect.remove(1);
+        }
+        
+        // Group fonts by category for organization
+        const fontsByCategory = {};
+        filteredFontsData.forEach(font => {
+            if (!fontsByCategory[font.category]) {
+                fontsByCategory[font.category] = [];
+            }
+            fontsByCategory[font.category].push(font);
+        });
+        
+        // Sort categories
+        const sortedCategories = ['sans-serif', 'serif', 'monospace', 'display', 'handwriting'];
+        
+        // Create optgroups for each category
+        sortedCategories.forEach(category => {
+            if (fontsByCategory[category] && fontsByCategory[category].length > 0) {
+                const optgroup = document.createElement('optgroup');
+                optgroup.label = category.charAt(0).toUpperCase() + category.slice(1) + 
+                                ` (${fontsByCategory[category].length})`;
+                
+                // Sort fonts alphabetically within each category
+                fontsByCategory[category].sort((a, b) => a.family.localeCompare(b.family));
+                
+                // Add fonts to optgroup
+                fontsByCategory[category].forEach(font => {
+                    const option = document.createElement('option');
+                    option.value = font.family;
+                    option.textContent = font.family;
+                    option.selected = font.family === '{{ user_prefs.google_font }}';
+                    optgroup.appendChild(option);
+                });
+                
+                googleFontSelect.appendChild(optgroup);
+            }
+        });
+        
+        // Display number of fonts found
+        console.log(`Found ${filteredFontsData.length} fonts matching current filters.`);
+    }
+    
+    // Load all Fonts from our API (which uses Bunny Fonts as a delivery mechanism)
+    function loadGoogleFonts() {
+        fetch('/api/fonts')
+            .then(response => response.json())
+            .then(data => {
+                if (data.items) {
+                    // Store the full font data
+                    googleFontsData = data.items;
+                    
+                    // Populate subsets dropdown with unique values
+                    const allSubsets = new Set();
+                    googleFontsData.forEach(font => {
+                        if (font.subsets) {
+                            font.subsets.forEach(subset => allSubsets.add(subset));
+                        }
+                    });
+                    
+                    // Add 'all' option at the top
+                    if (!fontSubsetSelect.querySelector('option[value="all"]')) {
+                        const allOption = document.createElement('option');
+                        allOption.value = 'all';
+                        allOption.textContent = 'All Languages';
+                        fontSubsetSelect.insertBefore(allOption, fontSubsetSelect.firstChild);
+                    }
+                    
+                    // Apply initial filtering
+                    filterFonts();
+                    
+                    // If a font is already selected, load its variants
+                    if ('{{ user_prefs.google_font }}') {
+                        updateFontVariants('{{ user_prefs.google_font }}');
+                    }
+                }
+            })
+            .catch(err => console.error('Error loading fonts:', err));
+    }
+    
+    // Update font variants based on selected font
+    function updateFontVariants(fontFamily) {
+        if (!fontFamily) {
+            fontVariantContainer.style.display = 'none';
+            fontWeightContainer.style.display = 'none';
+            return;
+        }
+        
+        fontVariantContainer.style.display = 'block';
+        fontWeightContainer.style.display = 'block';
+        
+        // Find the selected font
+        const selectedFont = googleFontsData.find(font => font.family === fontFamily);
+        if (!selectedFont) return;
+        
+        // Clear existing variants
+        fontVariantSelect.innerHTML = '';
+        
+        // Add variants based on the selected font
+        const variants = selectedFont.variants || [];
+        
+        // Add regular and italic variants if available
+        if (variants.includes('regular')) {
+            const regularOption = document.createElement('option');
+            regularOption.value = 'regular';
+            regularOption.textContent = 'Regular';
+            regularOption.selected = '{{ user_prefs.font_variant }}' === 'regular';
+            fontVariantSelect.appendChild(regularOption);
+        }
+        
+        if (variants.includes('italic')) {
+            const italicOption = document.createElement('option');
+            italicOption.value = 'italic';
+            italicOption.textContent = 'Italic';
+            italicOption.selected = '{{ user_prefs.font_variant }}' === 'italic';
+            fontVariantSelect.appendChild(italicOption);
+        }
+        
+        // Update weights select
+        updateFontWeights(selectedFont, '{{ user_prefs.font_variant }}');
+    }
+    
+    // Update font weights based on selected font and variant
+    function updateFontWeights(selectedFont, variant) {
+        // Clear existing weights
+        fontWeightSelect.innerHTML = '';
+        
+        if (!selectedFont) return;
+        
+        const variants = selectedFont.variants || [];
+        const weights = [];
+        
+        // Extract weights depending on variant (regular or italic)
+        variants.forEach(v => {
+            if (variant === 'italic' && v.includes('italic')) {
+                // For italic variant, extract weights from 'Nitalic' or 'italic'
+                const weight = v === 'italic' ? '400' : v.replace('italic', '');
+                if (!weights.includes(weight)) weights.push(weight);
+            } else if (variant === 'regular' && !v.includes('italic')) {
+                // For regular variant, extract weights from 'N' or 'regular'
+                const weight = v === 'regular' ? '400' : v;
+                if (!weights.includes(weight)) weights.push(weight);
+            }
+        });
+        
+        // Sort weights numerically
+        weights.sort((a, b) => parseInt(a) - parseInt(b));
+        
+        // Add weight options
+        weights.forEach(weight => {
+            const option = document.createElement('option');
+            option.value = weight;
+            option.textContent = weight;
+            option.selected = '{{ user_prefs.font_weight }}' === weight;
+            fontWeightSelect.appendChild(option);
+        });
+        
+        // If no weights are found or the current weight is not available, add 400 as default
+        if (fontWeightSelect.options.length === 0) {
+            const option = document.createElement('option');
+            option.value = '400';
+            option.textContent = '400 (Regular)';
+            option.selected = true;
+            fontWeightSelect.appendChild(option);
+        }
+    }
+    
+    // Font Category filter change event
+    fontCategorySelect.addEventListener('change', () => {
+        currentCategory = fontCategorySelect.value;
+        filterFonts();
+    });
+    
+    // Font Subset (language) filter change event
+    fontSubsetSelect.addEventListener('change', () => {
+        currentSubset = fontSubsetSelect.value;
+        filterFonts();
+    });
+    
+    // Google Font select change event
+    googleFontSelect.addEventListener('change', () => {
+        updateFontVariants(googleFontSelect.value);
+        const prefs = saveUserPrefs();
+        
+        // Apply to iframe content
+        const frameDoc = contentFrame.contentDocument || contentFrame.contentWindow.document;
+        applyUserPrefsToContent(frameDoc);
+    });
+    
+    // Font variant select change event
+    fontVariantSelect.addEventListener('change', () => {
+        const selectedFont = googleFontsData.find(font => font.family === googleFontSelect.value);
+        updateFontWeights(selectedFont, fontVariantSelect.value);
+        const prefs = saveUserPrefs();
+        
+        // Apply to iframe content
+        const frameDoc = contentFrame.contentDocument || contentFrame.contentWindow.document;
+        applyUserPrefsToContent(frameDoc);
+    });
+    
+    // Font weight select change event
+    fontWeightSelect.addEventListener('change', () => {
+        const prefs = saveUserPrefs();
+        
+        // Apply to iframe content
+        const frameDoc = contentFrame.contentDocument || contentFrame.contentWindow.document;
+        applyUserPrefsToContent(frameDoc);
+    });
+    
     themeSelect.addEventListener('change', () => {
         const prefs = saveUserPrefs();
         
@@ -292,5 +634,6 @@
     
     // Initialize
     updateButtonState();
+    loadGoogleFonts();
 </script>
 {% endblock %}
