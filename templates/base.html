@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}SimplePub - EPUB Reader{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    {% block head %}{% endblock %}
+</head>
+<body data-theme="light">
+    <header>
+        <div class="header-container">
+            <h1 class="logo"><a href="{{ url_for('index') }}">SimplePub</a></h1>
+            <nav>
+                <ul>
+                    <li><a href="{{ url_for('index') }}">Library</a></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+    
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+    
+    <footer>
+        <div class="footer-container">
+            <p>&copy; {{ 2025 }} SimplePub - A Simple EPUB Reader</p>
+        </div>
+    </footer>
+    
+    {% block scripts %}{% endblock %}
+</body>
+</html>

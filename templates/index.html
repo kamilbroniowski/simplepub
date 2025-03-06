@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block title %}SimplePub - Library{% endblock %}
+
+{% block content %}
+<div class="container">
+    <section class="library">
+        <h2>Your Library</h2>
+        
+        <div class="upload-area">
+            <form action="{{ url_for('upload_file') }}" method="POST" enctype="multipart/form-data">
+                <div class="file-input-container">
+                    <label for="file-upload" class="custom-file-upload">
+                        <span class="upload-icon">+</span>
+                        <span>Upload EPUB</span>
+                    </label>
+                    <input id="file-upload" type="file" name="file" accept=".epub" />
+                    <button type="submit" id="upload-button" style="display: none;">Upload</button>
+                </div>
+            </form>
+        </div>
+        
+        {% if books %}
+        <div class="books-grid">
+            {% for book in books %}
+            <div class="book-card">
+                <a href="{{ url_for('read_book', book_id=book.id) }}" class="book-link">
+                    <div class="book-info">
+                        <h3 class="book-title">{{ book.title }}</h3>
+                        <p class="book-author">{{ book.author }}</p>
+                    </div>
+                    <div class="book-progress">
+                        <div class="progress-bar">
+                            <div class="progress" style="width: {{ book.progress }}%;"></div>
+                        </div>
+                        <span class="progress-text">{{ book.progress }}%</span>
+                    </div>
+                </a>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-library">
+            <p>Your library is empty. Upload an EPUB file to start reading.</p>
+        </div>
+        {% endif %}
+    </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const fileInput = document.getElementById('file-upload');
+        const uploadButton = document.getElementById('upload-button');
+        
+        fileInput.addEventListener('change', function() {
+            if (fileInput.files.length > 0) {
+                uploadButton.click();
+            }
+        });
+    });
+</script>
+{% endblock %}

@@ -169,3 +169,12 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# SimplePub app specific
+/uploads/
+/extracted/
+/progress/
+user_prefs.json
+__pycache__/
+.vscode/
+*.pyc

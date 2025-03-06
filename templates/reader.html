@@ -1,0 +1,296 @@
+{% extends "base.html" %}
+
+{% block title %}{{ metadata.title }} - SimplePub{% endblock %}
+
+{% block head %}
+<style>
+    /* Reader-specific styles */
+    :root {
+        --font-size: {{ user_prefs.font_size }}px;
+        --line-height: {{ user_prefs.line_height }};
+        --font-family: {{ user_prefs.font_family }};
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="reader-container">
+    <div class="reader-controls">
+        <div class="nav-buttons">
+            <button id="prev-chapter" class="control-btn">&laquo; Prev</button>
+            <button id="next-chapter" class="control-btn">Next &raquo;</button>
+        </div>
+        <div class="toc-button">
+            <button id="toggle-toc" class="control-btn">Contents</button>
+        </div>
+        <div class="settings-button">
+            <button id="toggle-settings" class="control-btn">Settings</button>
+        </div>
+    </div>
+    
+    <div class="reader-content">
+        <iframe id="content-frame" class="content-frame" src="{{ url_for('book_content', book_id=book_id, content_path=current_file) }}"></iframe>
+    </div>
+    
+    <div id="toc-panel" class="side-panel">
+        <div class="panel-header">
+            <h3>Table of Contents</h3>
+            <button id="close-toc" class="close-btn">&times;</button>
+        </div>
+        <div class="panel-content">
+            <ul class="toc-list">
+                {% for item in metadata.toc %}
+                <li>
+                    <a href="#" class="toc-item" data-href="{{ item.href }}">{{ item.title }}</a>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+    
+    <div id="settings-panel" class="side-panel">
+        <div class="panel-header">
+            <h3>Settings</h3>
+            <button id="close-settings" class="close-btn">&times;</button>
+        </div>
+        <div class="panel-content">
+            <div class="settings-group">
+                <label for="font-size">Font Size</label>
+                <input type="range" id="font-size" min="12" max="24" step="1" value="{{ user_prefs.font_size }}">
+                <span id="font-size-value">{{ user_prefs.font_size }}px</span>
+            </div>
+            
+            <div class="settings-group">
+                <label for="line-height">Line Height</label>
+                <input type="range" id="line-height" min="1" max="2" step="0.1" value="{{ user_prefs.line_height }}">
+                <span id="line-height-value">{{ user_prefs.line_height }}</span>
+            </div>
+            
+            <div class="settings-group">
+                <label for="font-family">Font Family</label>
+                <select id="font-family">
+                    <option value="serif" {% if user_prefs.font_family == 'serif' %}selected{% endif %}>Serif</option>
+                    <option value="sans-serif" {% if user_prefs.font_family == 'sans-serif' %}selected{% endif %}>Sans-Serif</option>
+                    <option value="monospace" {% if user_prefs.font_family == 'monospace' %}selected{% endif %}>Monospace</option>
+                </select>
+            </div>
+            
+            <div class="settings-group">
+                <label for="theme">Theme</label>
+                <select id="theme">
+                    <option value="light" {% if user_prefs.theme == 'light' %}selected{% endif %}>Light</option>
+                    <option value="dark" {% if user_prefs.theme == 'dark' %}selected{% endif %}>Dark</option>
+                    <option value="sepia" {% if user_prefs.theme == 'sepia' %}selected{% endif %}>Sepia</option>
+                </select>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Book data
+    const bookId = "{{ book_id }}";
+    const spine = {{ metadata.spine|tojson }};
+    const currentFile = "{{ current_file }}";
+    const initialPosition = {{ position }};
+    
+    // Elements
+    const contentFrame = document.getElementById('content-frame');
+    const prevButton = document.getElementById('prev-chapter');
+    const nextButton = document.getElementById('next-chapter');
+    const tocPanel = document.getElementById('toc-panel');
+    const settingsPanel = document.getElementById('settings-panel');
+    const toggleTocButton = document.getElementById('toggle-toc');
+    const toggleSettingsButton = document.getElementById('toggle-settings');
+    const closeTocButton = document.getElementById('close-toc');
+    const closeSettingsButton = document.getElementById('close-settings');
+    const tocItems = document.querySelectorAll('.toc-item');
+    
+    // Settings elements
+    const fontSizeInput = document.getElementById('font-size');
+    const lineHeightInput = document.getElementById('line-height');
+    const fontFamilySelect = document.getElementById('font-family');
+    const themeSelect = document.getElementById('theme');
+    const fontSizeValue = document.getElementById('font-size-value');
+    const lineHeightValue = document.getElementById('line-height-value');
+    
+    // Track current position
+    let currentFileIndex = spine.indexOf(currentFile);
+    if (currentFileIndex === -1) currentFileIndex = 0;
+    
+    // Scroll to the saved position when iframe loads
+    contentFrame.addEventListener('load', function() {
+        // Wait a bit for the content to render
+        setTimeout(() => {
+            const frameDoc = contentFrame.contentDocument || contentFrame.contentWindow.document;
+            
+            // Apply user preferences to iframe content
+            applyUserPrefsToContent(frameDoc);
+            
+            // Scroll to the saved position
+            if (initialPosition > 0) {
+                const totalHeight = frameDoc.body.scrollHeight;
+                frameDoc.body.scrollTop = initialPosition * totalHeight;
+            }
+            
+            // Save reading position when scrolling
+            frameDoc.addEventListener('scroll', function() {
+                const scrollPos = frameDoc.body.scrollTop;
+                const scrollHeight = frameDoc.body.scrollHeight;
+                const scrollPercentage = scrollPos / scrollHeight;
+                
+                saveProgress(spine[currentFileIndex], scrollPercentage);
+            });
+        }, 200);
+    });
+    
+    // Navigation functions
+    function navigateToChapter(index) {
+        if (index >= 0 && index < spine.length) {
+            currentFileIndex = index;
+            contentFrame.src = `/book/${bookId}/content/${spine[index]}`;
+            updateButtonState();
+        }
+    }
+    
+    function updateButtonState() {
+        prevButton.disabled = currentFileIndex <= 0;
+        nextButton.disabled = currentFileIndex >= spine.length - 1;
+    }
+    
+    function saveProgress(filePath, position) {
+        fetch('/api/save_progress', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                book_id: bookId,
+                current_file: filePath,
+                position: position
+            })
+        });
+    }
+    
+    function saveUserPrefs() {
+        const prefs = {
+            font_size: parseInt(fontSizeInput.value),
+            line_height: parseFloat(lineHeightInput.value),
+            font_family: fontFamilySelect.value,
+            theme: themeSelect.value
+        };
+        
+        fetch('/api/user_prefs', {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(prefs)
+        });
+        
+        return prefs;
+    }
+    
+    function applyUserPrefsToContent(doc) {
+        if (!doc || !doc.body) return;
+        
+        const body = doc.body;
+        
+        // Create or get style element
+        let style = doc.getElementById('reader-custom-style');
+        if (!style) {
+            style = doc.createElement('style');
+            style.id = 'reader-custom-style';
+            doc.head.appendChild(style);
+        }
+        
+        // Apply preferences as CSS
+        style.textContent = `
+            body {
+                font-family: ${fontFamilySelect.value} !important;
+                font-size: ${fontSizeInput.value}px !important;
+                line-height: ${lineHeightInput.value} !important;
+            }
+        `;
+        
+        // Apply theme
+        document.body.dataset.theme = themeSelect.value;
+        doc.body.dataset.theme = themeSelect.value;
+    }
+    
+    // Event listeners
+    prevButton.addEventListener('click', () => navigateToChapter(currentFileIndex - 1));
+    nextButton.addEventListener('click', () => navigateToChapter(currentFileIndex + 1));
+    
+    toggleTocButton.addEventListener('click', () => {
+        tocPanel.classList.toggle('active');
+        settingsPanel.classList.remove('active');
+    });
+    
+    toggleSettingsButton.addEventListener('click', () => {
+        settingsPanel.classList.toggle('active');
+        tocPanel.classList.remove('active');
+    });
+    
+    closeTocButton.addEventListener('click', () => tocPanel.classList.remove('active'));
+    closeSettingsButton.addEventListener('click', () => settingsPanel.classList.remove('active'));
+    
+    // TOC item clicks
+    tocItems.forEach(item => {
+        item.addEventListener('click', (e) => {
+            e.preventDefault();
+            const href = item.dataset.href;
+            contentFrame.src = `/book/${bookId}/content/${href}`;
+            tocPanel.classList.remove('active');
+            
+            // Find the index in spine that matches or contains this href
+            const baseHref = href.split('#')[0];
+            const spineIndex = spine.findIndex(path => path.includes(baseHref));
+            if (spineIndex !== -1) {
+                currentFileIndex = spineIndex;
+                updateButtonState();
+            }
+        });
+    });
+    
+    // Settings changes
+    fontSizeInput.addEventListener('input', () => {
+        fontSizeValue.textContent = `${fontSizeInput.value}px`;
+        const prefs = saveUserPrefs();
+        
+        // Apply to iframe content
+        const frameDoc = contentFrame.contentDocument || contentFrame.contentWindow.document;
+        applyUserPrefsToContent(frameDoc);
+    });
+    
+    lineHeightInput.addEventListener('input', () => {
+        lineHeightValue.textContent = lineHeightInput.value;
+        const prefs = saveUserPrefs();
+        
+        // Apply to iframe content
+        const frameDoc = contentFrame.contentDocument || contentFrame.contentWindow.document;
+        applyUserPrefsToContent(frameDoc);
+    });
+    
+    fontFamilySelect.addEventListener('change', () => {
+        const prefs = saveUserPrefs();
+        
+        // Apply to iframe content
+        const frameDoc = contentFrame.contentDocument || contentFrame.contentWindow.document;
+        applyUserPrefsToContent(frameDoc);
+    });
+    
+    themeSelect.addEventListener('change', () => {
+        const prefs = saveUserPrefs();
+        
+        // Apply to iframe content
+        const frameDoc = contentFrame.contentDocument || contentFrame.contentWindow.document;
+        applyUserPrefsToContent(frameDoc);
+    });
+    
+    // Initialize
+    updateButtonState();
+</script>
+{% endblock %}
